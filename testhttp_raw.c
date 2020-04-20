@@ -5,8 +5,33 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <errno.h>
+#include <stdarg.h>
 
-#include "err.h"
+void syserr(const char *fmt, ...)
+{
+  va_list fmt_args;
+  int errno1 = errno;
+
+  fprintf(stderr, "ERROR: ");
+  va_start(fmt_args, fmt);
+  vfprintf(stderr, fmt, fmt_args);
+  va_end(fmt_args);
+  fprintf(stderr, " (%d; %s)\n", errno1, strerror(errno1));
+  exit(EXIT_FAILURE);
+}
+
+void fatal(const char *fmt, ...)
+{
+  va_list fmt_args;
+
+  fprintf(stderr, "ERROR: ");
+  va_start(fmt_args, fmt);
+  vfprintf(stderr, fmt, fmt_args);
+  va_end(fmt_args);
+  fprintf(stderr, "\n");
+  exit(EXIT_FAILURE);
+}
 
 int main(int argc, char *argv[]) {
 
@@ -30,23 +55,19 @@ int main(int argc, char *argv[]) {
   addr_hints.ai_protocol = IPPROTO_TCP;
   err = getaddrinfo(host, port, &addr_hints, &addr_result);
   if (err == EAI_SYSTEM) {
-    return 1;
-    // syserr("getaddrinfo: %s", gai_strerror(err));
+    syserr("getaddrinfo: %s", gai_strerror(err));
   }
   else if (err != 0) {
-    return 1;
-    // fatal("getaddrinfo: %s", gai_strerror(err));
+    fatal("getaddrinfo: %s", gai_strerror(err));
   }
 
   sock = socket(addr_result->ai_family, addr_result->ai_socktype, addr_result->ai_protocol);
   if (sock < 0) {
-    return 1;
-    // syserr("socket");
+    syserr("socket");
   }
 
   if (connect(sock, addr_result->ai_addr, addr_result->ai_addrlen) < 0) {
-    return 1;
-    // syserr("connect");
+    syserr("connect");
   }
 
   freeaddrinfo(addr_result);
@@ -88,7 +109,7 @@ int main(int argc, char *argv[]) {
   // char str[] = "GET / HTTP/1.1\r\nUser-Agent: curl/7.16.3 libcurl/7.16.3 OpenSSL/0.9.7l zlib/1.2.3\r\nHost: www.example.com\r\nAccept-Language: en, mi\r\n\r\n";
   // char str[] = "GET /hello.txt HTTP/1.1\r\nHost: example.com\r\n\r\n";
   char *str = "GET %s HTTP/1.1\r\nHost: %s\r\nCookie: %s\r\nConnection: close\n\r\n\r\n";
-  char message[1024];
+  char message[100000];
   sprintf(message, str, "/", argv[3], cookies);
     // printf("\n-----\n%s\n-----\n", message);
 
@@ -101,14 +122,31 @@ int main(int argc, char *argv[]) {
     // syserr("partial / failed write");
   }
 
-  char buffer[4096]; //bez podawania rozmiaru lepiej?
+  char buffer[1000005], buffer2[1000005]; //bez podawania rozmiaru lepiej?
   memset(buffer, 0, sizeof(buffer));
-  rcv_len = read(sock, buffer, sizeof(buffer) - 1);
-  if (rcv_len < 0) {
-    return 1;
-    // syserr("read");
+  memset(buffer2, 0, sizeof(buffer2));
+  rcv_len = read(sock, buffer, sizeof(buffer));
+
+  printf ("%s\n\n\n\n", buffer);
+
+
+  while (rcv_len > 0) {
+    rcv_len = read(sock, buffer2, sizeof(buffer2));
+    // printf("read from socket: %zd bytes\n", rcv_len);
+    printf ("%s\n\n\n\n", buffer2);
+    write(sock, buffer2, rcv_len); //czy to potrzebne?
+
+    if (rcv_len > 0) {
+      strcat(buffer, buffer2);
+    }
   }
-  // printf("read from socket: %zd bytes: %s\n", rcv_len, buffer);
+
+  // printf ("%s\n", buffer);
+
+  // if (rcv_len < 0) {
+  //   return 1;
+  //   // syserr("read");
+  // }
 
   // printf("%.*s\n", 15, buffer);
   char status[20]; //bez rozmiaru?
@@ -127,7 +165,7 @@ int main(int argc, char *argv[]) {
    */
 
   if (strcmp("HTTP/1.1 200 OK", status) != 0) {
-    printf ("%s\n", status);
+    printf ("%s\n", strtok(buffer, "\r"));
   }
   else {
     int dlen = strlen(buffer);
