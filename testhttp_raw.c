@@ -33,7 +33,8 @@ void fatal(const char *fmt, ...)
   exit(EXIT_FAILURE);
 }
 
-char *read_cookies(char *filename) {
+char *read_cookies(char *filename, int *ok) {
+  *ok = 1;
   char *cookies = 0;
   int cookies_len;
   FILE *f = fopen(filename, "rb"); //rb??
@@ -47,14 +48,14 @@ char *read_cookies(char *filename) {
       fread(cookies, 1, cookies_len, f);
     }
     else {
+      *ok = -1; //error
       return cookies;
-      //errrrror
     }
     fclose(f);
   }
   else {
+    *ok = -1; //error
     return cookies;
-    //errrrror
   }
 
   int ii = 0;
@@ -80,11 +81,10 @@ char *set_request(char *tested_http_address, char **cookies) {
 
 int main(int argc, char *argv[]) {
 
-  int sock, err;
-  char *host;
-  char *port;
-  struct addrinfo addr_hints;
-  struct addrinfo *addr_result;
+  int sock, err, ok;
+  char *host, *port, *cookies, *message;
+  struct addrinfo addr_hints, *addr_result;
+  ssize_t len, rcv_len;
 
   if (argc < 3) {
     fatal("Usage: %s <connection_address>:<port> <cache file> <tested_http_address>\n", argv[0]);
@@ -104,23 +104,24 @@ int main(int argc, char *argv[]) {
   else if (err != 0) {
     fatal("getaddrinfo: %s", gai_strerror(err));
   }
-
   sock = socket(addr_result->ai_family, addr_result->ai_socktype, addr_result->ai_protocol);
   if (sock < 0) {
     syserr("socket");
   }
-
   if (connect(sock, addr_result->ai_addr, addr_result->ai_addrlen) < 0) {
     syserr("connect");
   }
 
   freeaddrinfo(addr_result);
 
-  char *cookies = read_cookies(argv[2]);
-  char *message = set_request(argv[3], &cookies);
+  cookies = read_cookies(argv[2], &ok);
+  if (!ok) {
+    syserr("read_cookies");
+  }
 
+  message = set_request(argv[3], &cookies);
 
-  ssize_t len, rcv_len;
+  // send_request()
 
   len = strnlen(message, 1000000);
 
@@ -148,14 +149,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  // printf ("%s\n", buffer);
 
-  // if (rcv_len < 0) {
-  //   return 1;
-  //   // syserr("read");
-  // }
-
-  // printf("%.*s\n", 15, buffer);
   char status[20]; //bez rozmiaru?
   strncpy(status, buffer, 15);
   status[15] = '\0';
