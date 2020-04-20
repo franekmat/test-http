@@ -33,6 +33,41 @@ void fatal(const char *fmt, ...)
   exit(EXIT_FAILURE);
 }
 
+void read_cookies(char **cookies, char *filename) {
+  int cookies_len;
+  FILE *f = fopen(filename, "rb"); //rb??
+
+  if (f) {
+    fseek(f, 0, SEEK_END);
+    cookies_len = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    *cookies = malloc(cookies_len);
+    if (*cookies) {
+      fread(*cookies, 1, cookies_len, f);
+    }
+    else {
+      return;
+      //errrrror
+    }
+    fclose(f);
+  }
+  else {
+    return;
+    //errrrror
+  }
+
+  int ii = 0;
+  for (; ii < cookies_len; ii++) {
+    if ((*cookies)[ii] == '\n') {
+      (*cookies)[ii] = ';';
+    }
+  }
+  if ((*cookies)[strlen(*cookies) - 1] == ';') {
+    (*cookies)[strlen(*cookies) - 1] = 0;
+  }
+  // czy nie są potrzebne spacje po srednikach? czy dobrze to zapisuje?
+}
+
 int main(int argc, char *argv[]) {
 
   int sock, err;
@@ -42,8 +77,7 @@ int main(int argc, char *argv[]) {
   struct addrinfo *addr_result;
 
   if (argc < 3) {
-    return 1;
-    // fatal("Usage: %s <connection_address>:<port> <cache file> <tested_http_address>\n", argv[0]);
+    fatal("Usage: %s <connection_address>:<port> <cache file> <tested_http_address>\n", argv[0]);
   }
 
   host = strtok(argv[1], ":");
@@ -73,38 +107,11 @@ int main(int argc, char *argv[]) {
   freeaddrinfo(addr_result);
 
   char *cookies = 0;
-  int cookies_len;
-  FILE *f = fopen(argv[2], "rb"); //rb??
+  read_cookies(&cookies, argv[2]);
 
-  if (f) {
-    fseek(f, 0, SEEK_END);
-    cookies_len = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    cookies = malloc(cookies_len);
-    if (cookies) {
-      fread(cookies, 1, cookies_len, f);
-    }
-    else {
-      return 1;
-      //errrrror
-    }
-    fclose(f);
-  }
-  else {
-    return 1;
-    //errrrror
-  }
+  printf ("%s\n", cookies);
 
-  int ii = 0;
-  for (; ii < cookies_len; ii++) {
-    if (cookies[ii] == '\n') {
-      cookies[ii] = ';';
-    }
-  }
-  if (cookies[strlen(cookies) - 1] == ';') {
-    cookies[strlen(cookies) - 1] = 0;
-  }
-  // czy nie są potrzebne spacje po srednikach? czy dobrze to zapisuje?
+  return 0;
 
   // char str[] = "GET / HTTP/1.1\r\nUser-Agent: curl/7.16.3 libcurl/7.16.3 OpenSSL/0.9.7l zlib/1.2.3\r\nHost: www.example.com\r\nAccept-Language: en, mi\r\n\r\n";
   // char str[] = "GET /hello.txt HTTP/1.1\r\nHost: example.com\r\n\r\n";
@@ -112,6 +119,8 @@ int main(int argc, char *argv[]) {
   char message[100000];
   sprintf(message, str, "/", argv[3], cookies);
     // printf("\n-----\n%s\n-----\n", message);
+
+  // set_request(&message)
 
   ssize_t len, rcv_len;
 
