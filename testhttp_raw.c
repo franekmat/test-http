@@ -33,8 +33,7 @@ void fatal(const char *fmt, ...)
   exit(EXIT_FAILURE);
 }
 
-char *read_cookies(char *filename, int *ok) {
-  *ok = 1;
+char *read_cookies(char *filename) {
   char *cookies = 0;
   int cookies_len;
   FILE *f = fopen(filename, "rb"); //rb??
@@ -48,14 +47,12 @@ char *read_cookies(char *filename, int *ok) {
       fread(cookies, 1, cookies_len, f);
     }
     else {
-      *ok = -1; //error
-      return cookies;
+      syserr("read_cookies");
     }
     fclose(f);
   }
   else {
-    *ok = -1; //error
-    return cookies;
+    syserr("read_cookies");
   }
 
   int ii = 0;
@@ -81,7 +78,7 @@ char *set_request(char *tested_http_address, char **cookies) {
 
 int main(int argc, char *argv[]) {
 
-  int sock, err, ok;
+  int sock, err;
   char *host, *port, *cookies, *message;
   struct addrinfo addr_hints, *addr_result;
   ssize_t len, rcv_len;
@@ -114,10 +111,7 @@ int main(int argc, char *argv[]) {
 
   freeaddrinfo(addr_result);
 
-  cookies = read_cookies(argv[2], &ok);
-  if (!ok) {
-    syserr("read_cookies");
-  }
+  cookies = read_cookies(argv[2]);
 
   message = set_request(argv[3], &cookies);
 
