@@ -5,55 +5,28 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include <errno.h>
-#include <stdarg.h>
-
-void syserr(const char *fmt, ...)
-{
-  va_list fmt_args;
-  int errno1 = errno;
-
-  fprintf(stderr, "ERROR: ");
-  va_start(fmt_args, fmt);
-  vfprintf(stderr, fmt, fmt_args);
-  va_end(fmt_args);
-  fprintf(stderr, " (%d; %s)\n", errno1, strerror(errno1));
-  exit(EXIT_FAILURE);
-}
-
-void fatal(const char *fmt, ...)
-{
-  va_list fmt_args;
-
-  fprintf(stderr, "ERROR: ");
-  va_start(fmt_args, fmt);
-  vfprintf(stderr, fmt, fmt_args);
-  va_end(fmt_args);
-  fprintf(stderr, "\n");
-  exit(EXIT_FAILURE);
-}
+#include "err.h"
 
 char *read_cookies(char *filename) {
   char *cookies = 0;
   int cookies_len;
   FILE *f = fopen(filename, "rb"); //rb??
 
-  if (f) {
-    fseek(f, 0, SEEK_END);
-    cookies_len = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    cookies = malloc(cookies_len);
-    if (cookies) {
-      fread(cookies, 1, cookies_len, f);
-    }
-    else {
-      syserr("read_cookies");
-    }
-    fclose(f);
+  if (!f) {
+    syserr("read_cookies");
+  }
+
+  fseek(f, 0, SEEK_END);
+  cookies_len = ftell(f);
+  fseek(f, 0, SEEK_SET);
+  cookies = malloc(cookies_len);
+  if (cookies) {
+    fread(cookies, 1, cookies_len, f);
   }
   else {
     syserr("read_cookies");
   }
+  fclose(f);
 
   int ii = 0;
   for (; ii < cookies_len; ii++) {
@@ -199,7 +172,7 @@ void set_connection(int *sock, char *address_port, struct addrinfo *addr_hints, 
 
 int main(int argc, char *argv[]) {
   int sock;
-  char *resource, *cookies, *message, *status;
+  char *resource, *cookies, *message;
   char buffer[1000005];
   struct addrinfo addr_hints, *addr_result;
 
@@ -217,6 +190,8 @@ int main(int argc, char *argv[]) {
   send_request(&sock, &message);
 
   receive_response(&sock, buffer);
+
+  printf ("%s\n", buffer);
 
   if (!check_ok_status(buffer)) {
     printf ("%s\n", strtok(buffer, "\r"));
