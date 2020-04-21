@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include "err.h"
 
+#define MAX_SIZE 1000005
+
 int hex2dec(char *value) {
   int len = strlen(value) - 1, base = 1, res = 0;
 
@@ -26,6 +28,30 @@ int hex2dec(char *value) {
   }
 
   return res;
+}
+
+void set_connection(int *sock, char *address_port, struct addrinfo *addr_hints, struct addrinfo **addr_result) {
+  char *host = strtok(address_port, ":");
+  char *port = strtok(NULL, ":"); //może zrobić to ładniej?
+
+  memset(addr_hints, 0, sizeof(struct addrinfo));
+  addr_hints->ai_family = AF_INET;
+  addr_hints->ai_socktype = SOCK_STREAM;
+  addr_hints->ai_protocol = IPPROTO_TCP;
+  int err = getaddrinfo(host, port, addr_hints, addr_result);
+  if (err == EAI_SYSTEM) {
+    syserr("getaddrinfo: %s", gai_strerror(err));
+  }
+  else if (err != 0) {
+    fatal("getaddrinfo: %s", gai_strerror(err));
+  }
+  *sock = socket((*addr_result)->ai_family, (*addr_result)->ai_socktype, (*addr_result)->ai_protocol);
+  if (sock < 0) {
+    syserr("socket");
+  }
+  if (connect(*sock, (*addr_result)->ai_addr, (*addr_result)->ai_addrlen) < 0) {
+    syserr("connect");
+  }
 }
 
 char *read_cookies(char *filename) {
@@ -58,7 +84,6 @@ char *read_cookies(char *filename) {
   if ((cookies)[strlen(cookies) - 1] == ';') {
     (cookies)[strlen(cookies) - 1] = 0;
   }
-  // czy nie są potrzebne spacje po srednikach? czy dobrze to zapisuje?
 
   return cookies;
 }
@@ -121,28 +146,20 @@ void send_request(int *sock, char **message) {
   }
 }
 
-void receive_response(int *sock, char *buffer) {
-  char buffer_tmp[1000005];
-  ssize_t rcv_len;
-
-  memset(buffer, 0, sizeof(*buffer)); //ok??
-  rcv_len = read(*sock, buffer, sizeof(buffer));
-
-  int suma = strlen(buffer);
-  int stop_copying = 0;
-
+void receive_header(int *sock, char *buffer) {
+  char buffer_tmp[MAX_SIZE];
+  ssize_t rcv_len = 1;
   while (rcv_len > 0) {
-    memset(buffer_tmp, 0, sizeof(buffer_tmp)); //ok??
-    rcv_len = read(*sock, buffer_tmp, sizeof(buffer_tmp));
-    suma += strlen(buffer_tmp);
-    if (rcv_len > 0 && !stop_copying) {
+    memset(buffer_tmp, 0, sizeof(buffer_tmp));
+    rcv_len = read(*sock, buffer_tmp, sizeof(buffer_tmp)); //ile ma ten sizeof?
+
+    if (rcv_len > 0) {
       strcat(buffer, buffer_tmp);
     }
-    char *pfound = strstr(buffer_tmp, "\r\n\r\n");
+
+    char *pfound = strstr(buffer, "\r\n\r\n");
     if (pfound != NULL) {
-      if (strstr(buffer, "Content-Length: ") != NULL) {
-        stop_copying = 1; //nie potrzebuję zapisywać całego zasobu, bo nie jest chunked
-      }
+      return;
     }
   }
 }
@@ -158,44 +175,7 @@ int check_ok_status(char *buffer) {
   return 1;
 }
 
-void extract_substring(char *res, char *s, size_t from, size_t to) {
-
-  memcpy(res, s + from, to - from);
-  res[to - from] = '\0';
-}
-
-void print_content_length(char **buffer) {
-  char *pfound = strstr(*buffer, "Content-Length: ");
-
-  if (pfound != NULL) {
-    char *pfound_end = strstr(pfound, "\r\n");
-    size_t from = pfound - (*buffer) + strlen("Content-Length: "); //czy int zamiast size_t?
-    size_t to = pfound_end - (*buffer);
-    char res[to - from + 1];
-    extract_substring(res, *buffer, from, to);
-    printf ("Dlugosc zasobu: %s\n", res);
-  }
-  else {
-    int ovr_size = 0;
-    pfound = strstr(*buffer, "\r\n\r\n") + strlen("\r\n\r\n");
-    size_t from = pfound - (*buffer);
-
-    while (from < strlen(*buffer)) {
-      char *pfound_end = strstr(pfound, "\r\n");
-      size_t to = pfound_end - (*buffer);
-      char res[to - from + 1];
-      extract_substring(res, *buffer, from, to);
-      int size_ = hex2dec(res);
-      ovr_size += size_;
-      // printf ("%s => %d\n", res, size_);
-      from = to + strlen("\r\n") + size_ + strlen("\r\n");
-      pfound = pfound_end + strlen("\r\n") + size_ + strlen("\r\n");
-    }
-    printf ("Dlugosc zasobu: %d\n", ovr_size);
-  }
-}
-
-void print_report(char *buffer) {
+void print_cookies(char *buffer) {
   char tmp_buffer[strlen(buffer) + 1]; //może inaczej? bez rozmiaru?
   int dlen = strlen(buffer);
   if (dlen > 0)
@@ -211,37 +191,127 @@ void print_report(char *buffer) {
           pfound = strstr(buffer + pos + 1, "Set-Cookie:");
       }
   }
-  print_content_length(&buffer);
 }
 
-void set_connection(int *sock, char *address_port, struct addrinfo *addr_hints, struct addrinfo **addr_result) {
-  char *host = strtok(address_port, ":");
-  char *port = strtok(NULL, ":"); //może zrobić to ładniej?
+void extract_substring(char *res, char *s, size_t from, size_t to) {
+  memcpy(res, s + from, to - from);
+  res[to - from] = '\0';
+}
 
-  memset(addr_hints, 0, sizeof(struct addrinfo));
-  addr_hints->ai_family = AF_INET;
-  addr_hints->ai_socktype = SOCK_STREAM;
-  addr_hints->ai_protocol = IPPROTO_TCP;
-  int err = getaddrinfo(host, port, addr_hints, addr_result);
-  if (err == EAI_SYSTEM) {
-    syserr("getaddrinfo: %s", gai_strerror(err));
+int get_not_chunked_length(char *buffer) {
+  char *pfound = strstr(buffer, "Content-Length: ");
+
+  if (pfound != NULL) {
+    char *pfound_end = strstr(pfound, "\r\n");
+    size_t from = pfound - buffer + strlen("Content-Length: "); //czy int zamiast size_t?
+    size_t to = pfound_end - buffer;
+    char res[to - from + 1];
+    extract_substring(res, buffer, from, to);
+    return atoi(res);
   }
-  else if (err != 0) {
-    fatal("getaddrinfo: %s", gai_strerror(err));
+
+  return -1;
+}
+
+void cut_header(char *buffer) {
+  char *pfound = strstr(buffer, "\r\n\r\n");
+  int pos = pfound - buffer + strlen("\r\n\r\n");
+  int i = 0;
+  while (pos < strlen(buffer)) {
+    buffer[i] = buffer[pos];
+    i++;
+    pos++;
   }
-  *sock = socket((*addr_result)->ai_family, (*addr_result)->ai_socktype, (*addr_result)->ai_protocol);
-  if (sock < 0) {
-    syserr("socket");
+  buffer[i] = '\0';
+}
+
+int get_content_length(char **buffer) {
+  int from = 0;
+  char *pfound_end = strstr(*buffer, "\r\n");
+  if (pfound_end == NULL) {
+    return -1;
   }
-  if (connect(*sock, (*addr_result)->ai_addr, (*addr_result)->ai_addrlen) < 0) {
-    syserr("connect");
+
+  size_t to = pfound_end - (*buffer);
+  char res[to + 1];
+  extract_substring(res, *buffer, from, to);
+
+  return hex2dec(res);
+}
+
+void just_read_content(int *sock, char *buffer) {
+  char buffer_tmp[MAX_SIZE];
+  ssize_t rcv_len = 1;
+
+  while (rcv_len > 0) {
+    memset(buffer_tmp, 0, sizeof(buffer_tmp));
+    rcv_len = read(*sock, buffer_tmp, sizeof(buffer_tmp));
   }
+}
+
+int receive_content(int *sock, char *buffer) {
+  char buffer_tmp[MAX_SIZE];
+  ssize_t rcv_len = 1;
+  int ovr_res = 0;
+
+  while (rcv_len > 0) {
+    memset(buffer_tmp, 0, sizeof(buffer_tmp));
+    rcv_len = read(*sock, buffer_tmp, sizeof(buffer_tmp));
+
+    if (rcv_len > 0) {
+      strcat(buffer, buffer_tmp);
+    }
+
+    int content_length = get_content_length(&buffer);
+    int overall_length = (strstr(buffer, "\r\n") - buffer) + strlen("\r\n") + content_length + strlen("\r\n");
+    if (content_length == -1) {
+      continue;
+    }
+    int i = 0;
+    if (overall_length <= strlen(buffer)) {
+      ovr_res += content_length;
+      // printf ("added %d\n", content_length);
+      while (overall_length < strlen(buffer)) {
+        buffer[i] = buffer[overall_length];
+        i++;
+        overall_length++;
+      }
+      buffer[i] = '\0';
+    }
+  }
+
+  return ovr_res;
+}
+
+void receive_response(int *sock) {
+  char buffer[MAX_SIZE];
+
+  receive_header(sock, buffer);
+
+  if (!check_ok_status(buffer)) {
+    printf ("%s\n", strtok(buffer, "\r\n")); //tak naprawde sam slash starczy
+    return;
+  }
+
+  print_cookies(buffer);
+
+  int content_length = get_not_chunked_length(buffer);
+
+  if (content_length == -1) {
+    cut_header(buffer);
+    content_length = receive_content(sock, buffer);
+  }
+  else {
+    just_read_content(sock, buffer);
+  }
+
+  printf ("Dlugosc zasobu: %d\n", content_length);
+
 }
 
 int main(int argc, char *argv[]) {
   int sock;
   char *resource, *cookies, *message;
-  char buffer[1000005];
   struct addrinfo addr_hints, *addr_result;
 
   if (argc < 3) {
@@ -257,14 +327,8 @@ int main(int argc, char *argv[]) {
 
   send_request(&sock, &message);
 
-  receive_response(&sock, buffer);
+  receive_response(&sock);
 
-  if (!check_ok_status(buffer)) {
-    printf ("%s\n", strtok(buffer, "\r"));
-  }
-  else {
-    print_report(buffer);
-  }
 
   return 0;
 }
