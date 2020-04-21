@@ -137,10 +137,33 @@ void print_report(char *buffer) {
   printf ("Dlugosc zasobu: %d\n", 1);
 }
 
-int main(int argc, char *argv[]) {
+void set_connection(int *sock, char *address_port, struct addrinfo *addr_hints, struct addrinfo **addr_result) {
+  char *host = strtok(address_port, ":");
+  char *port = strtok(NULL, ":"); //może zrobić to ładniej?
 
-  int sock, err;
-  char *host, *port, *cookies, *message, *status;
+  memset(addr_hints, 0, sizeof(struct addrinfo));
+  addr_hints->ai_family = AF_INET;
+  addr_hints->ai_socktype = SOCK_STREAM;
+  addr_hints->ai_protocol = IPPROTO_TCP;
+  int err = getaddrinfo(host, port, addr_hints, addr_result);
+  if (err == EAI_SYSTEM) {
+    syserr("getaddrinfo: %s", gai_strerror(err));
+  }
+  else if (err != 0) {
+    fatal("getaddrinfo: %s", gai_strerror(err));
+  }
+  *sock = socket((*addr_result)->ai_family, (*addr_result)->ai_socktype, (*addr_result)->ai_protocol);
+  if (sock < 0) {
+    syserr("socket");
+  }
+  if (connect(*sock, (*addr_result)->ai_addr, (*addr_result)->ai_addrlen) < 0) {
+    syserr("connect");
+  }
+}
+
+int main(int argc, char *argv[]) {
+  int sock;
+  char *cookies, *message, *status;
   char buffer[1000005];
   struct addrinfo addr_hints, *addr_result;
 
@@ -148,27 +171,7 @@ int main(int argc, char *argv[]) {
     fatal("Usage: %s <connection_address>:<port> <cache file> <tested_http_address>\n", argv[0]);
   }
 
-  host = strtok(argv[1], ":");
-  port = strtok(NULL, ":"); //może zrobić to ładniej?
-
-  memset(&addr_hints, 0, sizeof(struct addrinfo));
-  addr_hints.ai_family = AF_INET;
-  addr_hints.ai_socktype = SOCK_STREAM;
-  addr_hints.ai_protocol = IPPROTO_TCP;
-  err = getaddrinfo(host, port, &addr_hints, &addr_result);
-  if (err == EAI_SYSTEM) {
-    syserr("getaddrinfo: %s", gai_strerror(err));
-  }
-  else if (err != 0) {
-    fatal("getaddrinfo: %s", gai_strerror(err));
-  }
-  sock = socket(addr_result->ai_family, addr_result->ai_socktype, addr_result->ai_protocol);
-  if (sock < 0) {
-    syserr("socket");
-  }
-  if (connect(sock, addr_result->ai_addr, addr_result->ai_addrlen) < 0) {
-    syserr("connect");
-  }
+  set_connection(&sock, argv[1], &addr_hints, &addr_result);
 
   freeaddrinfo(addr_result);
 
@@ -178,14 +181,6 @@ int main(int argc, char *argv[]) {
   send_request(&sock, &message);
 
   receive_response(&sock, buffer);
-
-  /*
-  Jeśli implementacja przyjmuje ograniczenia na liczbę przyjmowanych ciasteczek
-   i ich długość, to ograniczenia te powinny zostać dobrane zgodnie z założeniami
-   przyjętymi w standardach HTTP dla rozwiązań ogólnego przeznaczenia. Dodatkowo przy
-   liczeniu długości przesyłanego zasobu należy uwzględnić możliwość, że zasób był
-   wysłany w częściach (kodowanie przesyłowe chunked).
-   */
 
   if (!check_ok_status(buffer)) {
     printf ("%s\n", strtok(buffer, "\r"));
