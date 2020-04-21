@@ -69,9 +69,53 @@ char *read_cookies(char *filename) {
   return cookies;
 }
 
-char *set_request(char *tested_http_address, char **cookies) {
-  char *message = malloc(66 + strlen(tested_http_address) + strlen(*cookies));
-  sprintf(message, "GET %s HTTP/1.1\r\nHost: %s\r\nCookie: %s\r\nConnection: close\n\r\n\r\n", "/", tested_http_address, *cookies);
+int http_address(char *s) {
+  if (s[0] == 'h' && s[1] == 't' && s[2] == 't' && s[3] == 'p' && s[4] == ':'
+      && s[5] == '/' && s[6] == '/') {
+        return 1;
+      }
+  return 0;
+}
+
+int https_address(char *s) {
+  if (s[0] == 'h' && s[1] == 't' && s[2] == 't' && s[3] == 'p' && s[4] == 's'
+      && s[5] == ':' && s[6] == '/' && s[7] == '/') {
+        return 1;
+      }
+  return 0;
+}
+
+void cut_http(char **s) {
+  (*s) += 7;
+}
+
+void cut_https(char **s) {
+  (*s) += 8;
+}
+
+char *set_request(char *tested_http_address, char **resource, char **cookies) {
+  if (http_address(tested_http_address)) {
+    cut_http(&tested_http_address);
+  }
+  if (https_address(tested_http_address)) {
+    cut_https(&tested_http_address);
+  }
+
+  char *x = strchr(tested_http_address, '/');
+
+  if (x != NULL) {
+    *resource = malloc(strlen(tested_http_address) * sizeof(char));
+    strcpy(*resource, tested_http_address);
+    *resource += (x - tested_http_address);
+    tested_http_address[x - tested_http_address] = 0;
+  }
+  else {
+    *resource = malloc(sizeof(char));
+    *resource[0] = '/';
+  }
+
+  char *message = malloc(62 + strlen(*resource) + strlen(tested_http_address) + strlen(*cookies));
+  sprintf(message, "GET %s HTTP/1.1\r\nHost: %s\r\nCookie: %s\r\nConnection: close\n\r\n", *resource, tested_http_address, *cookies);
 
   return message;
 }
@@ -91,16 +135,8 @@ void receive_response(int *sock, char *buffer) {
   memset(buffer_tmp, 0, sizeof(buffer_tmp)); //ok??
   rcv_len = read(*sock, buffer, sizeof(buffer));
 
-  // printf ("%s\n\n\n\n", buffer_tmp);
-  // return;
-
-
   while (rcv_len > 0) {
     rcv_len = read(*sock, buffer_tmp, sizeof(buffer_tmp));
-    // printf("read from socket: %zd bytes\n", rcv_len);
-    // printf ("%s\n\n\n\n", buffer_tmp);
-    write(*sock, buffer_tmp, rcv_len); //czy to potrzebne?
-
     if (rcv_len > 0) {
       strcat(buffer, buffer_tmp);
     }
@@ -163,7 +199,7 @@ void set_connection(int *sock, char *address_port, struct addrinfo *addr_hints, 
 
 int main(int argc, char *argv[]) {
   int sock;
-  char *cookies, *message, *status;
+  char *resource, *cookies, *message, *status;
   char buffer[1000005];
   struct addrinfo addr_hints, *addr_result;
 
@@ -176,7 +212,7 @@ int main(int argc, char *argv[]) {
   freeaddrinfo(addr_result);
 
   cookies = read_cookies(argv[2]);
-  message = set_request(argv[3], &cookies);
+  message = set_request(argv[3], &resource, &cookies);
 
   send_request(&sock, &message);
 
@@ -188,7 +224,6 @@ int main(int argc, char *argv[]) {
   else {
     print_report(buffer);
   }
-
 
   return 0;
 }
