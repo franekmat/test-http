@@ -283,7 +283,7 @@ int receive_content(int *sock, char *buffer) {
   return ovr_res;
 }
 
-void receive_response(int *sock) {
+void handle_response(int *sock) {
   char buffer[MAX_SIZE];
 
   receive_header(sock, buffer);
@@ -327,7 +327,7 @@ int main(int argc, char *argv[]) {
 
   send_request(&sock, &message);
 
-  receive_response(&sock);
+  handle_response(&sock);
 
   free(cookies);
   free(message);
