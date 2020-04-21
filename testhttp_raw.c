@@ -76,12 +76,20 @@ char *set_request(char *tested_http_address, char **cookies) {
   return message;
 }
 
+void send_request(int *sock, char **message) {
+  ssize_t len = strnlen(*message, 1000000); //8KB ??
+  if (write(*sock, *message, len) != len) {
+    syserr("partial / failed write");
+  }
+}
+
 int main(int argc, char *argv[]) {
 
   int sock, err;
   char *host, *port, *cookies, *message;
+  char buffer[1000005], buffer_tmp[1000005];
   struct addrinfo addr_hints, *addr_result;
-  ssize_t len, rcv_len;
+  ssize_t rcv_len;
 
   if (argc < 3) {
     fatal("Usage: %s <connection_address>:<port> <cache file> <tested_http_address>\n", argv[0]);
@@ -112,34 +120,25 @@ int main(int argc, char *argv[]) {
   freeaddrinfo(addr_result);
 
   cookies = read_cookies(argv[2]);
-
   message = set_request(argv[3], &cookies);
 
-  // send_request()
+  send_request(&sock, &message);
 
-  len = strnlen(message, 1000000);
-
-  if (write(sock, message, len) != len) {
-    return 1;
-    // syserr("partial / failed write");
-  }
-
-  char buffer[1000005], buffer2[1000005]; //bez podawania rozmiaru lepiej?
   memset(buffer, 0, sizeof(buffer));
-  memset(buffer2, 0, sizeof(buffer2));
+  memset(buffer_tmp, 0, sizeof(buffer_tmp));
   rcv_len = read(sock, buffer, sizeof(buffer));
 
   printf ("%s\n\n\n\n", buffer);
 
 
   while (rcv_len > 0) {
-    rcv_len = read(sock, buffer2, sizeof(buffer2));
+    rcv_len = read(sock, buffer_tmp, sizeof(buffer_tmp));
     // printf("read from socket: %zd bytes\n", rcv_len);
-    printf ("%s\n\n\n\n", buffer2);
-    write(sock, buffer2, rcv_len); //czy to potrzebne?
+    printf ("%s\n\n\n\n", buffer_tmp);
+    write(sock, buffer_tmp, rcv_len); //czy to potrzebne?
 
     if (rcv_len > 0) {
-      strcat(buffer, buffer2);
+      strcat(buffer, buffer_tmp);
     }
   }
 
