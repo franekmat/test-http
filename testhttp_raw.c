@@ -7,6 +7,27 @@
 #include <stdlib.h>
 #include "err.h"
 
+int hex2dec(char *value) {
+  int len = strlen(value) - 1, base = 1, res = 0;
+
+  for (; len >= 0; len--) {
+    if ((value)[len] >= '0' && (value)[len] <= '9') {
+      res += ((value)[len] - '0') * base;
+      base *= 16;
+    }
+    else if ((value)[len] >= 'a' && (value)[len] <= 'f') {
+      res += ((value)[len] - 'a' + 10) * base;
+      base *= 16;
+    }
+    else if ((value)[len] >= 'A' && (value)[len] <= 'F') {
+      res += ((value)[len] - 'A' + 10) * base;
+      base *= 16;
+    }
+  }
+
+  return res;
+}
+
 char *read_cookies(char *filename) {
   char *cookies = 0;
   int cookies_len;
@@ -105,13 +126,23 @@ void receive_response(int *sock, char *buffer) {
   ssize_t rcv_len;
 
   memset(buffer, 0, sizeof(*buffer)); //ok??
-  memset(buffer_tmp, 0, sizeof(buffer_tmp)); //ok??
   rcv_len = read(*sock, buffer, sizeof(buffer));
 
+  int suma = strlen(buffer);
+  int stop_copying = 0;
+
   while (rcv_len > 0) {
+    memset(buffer_tmp, 0, sizeof(buffer_tmp)); //ok??
     rcv_len = read(*sock, buffer_tmp, sizeof(buffer_tmp));
-    if (rcv_len > 0) {
+    suma += strlen(buffer_tmp);
+    if (rcv_len > 0 && !stop_copying) {
       strcat(buffer, buffer_tmp);
+    }
+    char *pfound = strstr(buffer_tmp, "\r\n\r\n");
+    if (pfound != NULL) {
+      if (strstr(buffer, "Content-Length: ") != NULL) {
+        stop_copying = 1; //nie potrzebuję zapisywać całego zasobu, bo nie jest chunked
+      }
     }
   }
 }
@@ -127,23 +158,60 @@ int check_ok_status(char *buffer) {
   return 1;
 }
 
+void extract_substring(char *res, char *s, size_t from, size_t to) {
+
+  memcpy(res, s + from, to - from);
+  res[to - from] = '\0';
+}
+
+void print_content_length(char **buffer) {
+  char *pfound = strstr(*buffer, "Content-Length: ");
+
+  if (pfound != NULL) {
+    char *pfound_end = strstr(pfound, "\r\n");
+    size_t from = pfound - (*buffer) + strlen("Content-Length: "); //czy int zamiast size_t?
+    size_t to = pfound_end - (*buffer);
+    char res[to - from + 1];
+    extract_substring(res, *buffer, from, to);
+    printf ("Dlugosc zasobu: %s\n", res);
+  }
+  else {
+    int ovr_size = 0;
+    pfound = strstr(*buffer, "\r\n\r\n") + strlen("\r\n\r\n");
+    size_t from = pfound - (*buffer);
+
+    while (from < strlen(*buffer)) {
+      char *pfound_end = strstr(pfound, "\r\n");
+      size_t to = pfound_end - (*buffer);
+      char res[to - from + 1];
+      extract_substring(res, *buffer, from, to);
+      int size_ = hex2dec(res);
+      ovr_size += size_;
+      // printf ("%s => %d\n", res, size_);
+      from = to + strlen("\r\n") + size_ + strlen("\r\n");
+      pfound = pfound_end + strlen("\r\n") + size_ + strlen("\r\n");
+    }
+    printf ("Dlugosc zasobu: %d\n", ovr_size);
+  }
+}
+
 void print_report(char *buffer) {
   char tmp_buffer[strlen(buffer) + 1]; //może inaczej? bez rozmiaru?
   int dlen = strlen(buffer);
   if (dlen > 0)
   {
-      char *pfound = strstr(buffer, "Set-Cookie:");
+      char *pfound = strstr(buffer, "Set-Cookie: ");
       while (pfound != NULL)
       {
           int pos = pfound - buffer; //iterator pos ustawiamy na 'S'
-          pos += 12; //przesunięcie iteratora tuż za 'Set-Cookie: '
+          pos += strlen("Set-Cookie: ");
           strcpy(tmp_buffer, buffer);
           char *cookie = strtok(tmp_buffer + pos, ";");
           printf ("%s\n", cookie);
           pfound = strstr(buffer + pos + 1, "Set-Cookie:");
       }
   }
-  printf ("Dlugosc zasobu: %d\n", 1);
+  print_content_length(&buffer);
 }
 
 void set_connection(int *sock, char *address_port, struct addrinfo *addr_hints, struct addrinfo **addr_result) {
@@ -190,8 +258,6 @@ int main(int argc, char *argv[]) {
   send_request(&sock, &message);
 
   receive_response(&sock, buffer);
-
-  printf ("%s\n", buffer);
 
   if (!check_ok_status(buffer)) {
     printf ("%s\n", strtok(buffer, "\r"));
