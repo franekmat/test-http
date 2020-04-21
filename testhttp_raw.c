@@ -329,6 +329,9 @@ int main(int argc, char *argv[]) {
 
   receive_response(&sock);
 
+  free(cookies);
+  free(message);
+  free(resource);
 
   return 0;
 }
