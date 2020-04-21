@@ -311,8 +311,8 @@ void receive_response(int *sock) {
 
 int main(int argc, char *argv[]) {
   int sock;
-  char *resource, *cookies, *message;
-  struct addrinfo addr_hints, *addr_result;
+  char *resource = NULL, *cookies = NULL, *message = NULL;
+  struct addrinfo addr_hints, *addr_result = NULL;
 
   if (argc < 3) {
     fatal("Usage: %s <connection_address>:<port> <cache file> <tested_http_address>\n", argv[0]);
