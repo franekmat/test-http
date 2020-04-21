@@ -83,13 +83,46 @@ void send_request(int *sock, char **message) {
   }
 }
 
+void receive_response(int *sock, char *buffer) {
+  char buffer_tmp[1000005];
+  ssize_t rcv_len;
+
+  memset(buffer, 0, sizeof(*buffer)); //ok??
+  memset(buffer_tmp, 0, sizeof(*buffer_tmp)); //ok??
+  rcv_len = read(*sock, buffer, sizeof(buffer));
+
+  printf ("%s\n\n\n\n", buffer);
+
+
+  while (rcv_len > 0) {
+    rcv_len = read(*sock, buffer_tmp, sizeof(buffer_tmp));
+    // printf("read from socket: %zd bytes\n", rcv_len);
+    printf ("%s\n\n\n\n", buffer_tmp);
+    write(*sock, buffer_tmp, rcv_len); //czy to potrzebne?
+
+    if (rcv_len > 0) {
+      strcat(buffer, buffer_tmp);
+    }
+  }
+}
+
+int check_ok_status(char *buffer) {
+  char status[16];
+  strncpy(status, buffer, 15);
+  status[15] = '\0';
+
+  if (strcmp("HTTP/1.1 200 OK", status) != 0) {
+    return 0;
+  }
+  return 1;
+}
+
 int main(int argc, char *argv[]) {
 
   int sock, err;
-  char *host, *port, *cookies, *message;
-  char buffer[1000005], buffer_tmp[1000005];
+  char *host, *port, *cookies, *message, *status;
+  char buffer[1000005];
   struct addrinfo addr_hints, *addr_result;
-  ssize_t rcv_len;
 
   if (argc < 3) {
     fatal("Usage: %s <connection_address>:<port> <cache file> <tested_http_address>\n", argv[0]);
@@ -124,28 +157,7 @@ int main(int argc, char *argv[]) {
 
   send_request(&sock, &message);
 
-  memset(buffer, 0, sizeof(buffer));
-  memset(buffer_tmp, 0, sizeof(buffer_tmp));
-  rcv_len = read(sock, buffer, sizeof(buffer));
-
-  printf ("%s\n\n\n\n", buffer);
-
-
-  while (rcv_len > 0) {
-    rcv_len = read(sock, buffer_tmp, sizeof(buffer_tmp));
-    // printf("read from socket: %zd bytes\n", rcv_len);
-    printf ("%s\n\n\n\n", buffer_tmp);
-    write(sock, buffer_tmp, rcv_len); //czy to potrzebne?
-
-    if (rcv_len > 0) {
-      strcat(buffer, buffer_tmp);
-    }
-  }
-
-
-  char status[20]; //bez rozmiaru?
-  strncpy(status, buffer, 15);
-  status[15] = '\0';
+  receive_response(&sock, buffer);
 
   char tmp_buffer[sizeof(buffer) + 1]; //może inaczej? bez rozmiaru?
 
@@ -158,7 +170,7 @@ int main(int argc, char *argv[]) {
    wysłany w częściach (kodowanie przesyłowe chunked).
    */
 
-  if (strcmp("HTTP/1.1 200 OK", status) != 0) {
+  if (!check_ok_status(buffer)) {
     printf ("%s\n", strtok(buffer, "\r"));
   }
   else {
