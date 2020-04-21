@@ -88,16 +88,17 @@ void receive_response(int *sock, char *buffer) {
   ssize_t rcv_len;
 
   memset(buffer, 0, sizeof(*buffer)); //ok??
-  memset(buffer_tmp, 0, sizeof(*buffer_tmp)); //ok??
+  memset(buffer_tmp, 0, sizeof(buffer_tmp)); //ok??
   rcv_len = read(*sock, buffer, sizeof(buffer));
 
-  printf ("%s\n\n\n\n", buffer);
+  // printf ("%s\n\n\n\n", buffer_tmp);
+  // return;
 
 
   while (rcv_len > 0) {
     rcv_len = read(*sock, buffer_tmp, sizeof(buffer_tmp));
     // printf("read from socket: %zd bytes\n", rcv_len);
-    printf ("%s\n\n\n\n", buffer_tmp);
+    // printf ("%s\n\n\n\n", buffer_tmp);
     write(*sock, buffer_tmp, rcv_len); //czy to potrzebne?
 
     if (rcv_len > 0) {
@@ -115,6 +116,25 @@ int check_ok_status(char *buffer) {
     return 0;
   }
   return 1;
+}
+
+void print_report(char *buffer) {
+  char tmp_buffer[strlen(buffer) + 1]; //może inaczej? bez rozmiaru?
+  int dlen = strlen(buffer);
+  if (dlen > 0)
+  {
+      char *pfound = strstr(buffer, "Set-Cookie:");
+      while (pfound != NULL)
+      {
+          int pos = pfound - buffer; //iterator pos ustawiamy na 'S'
+          pos += 12; //przesunięcie iteratora tuż za 'Set-Cookie: '
+          strcpy(tmp_buffer, buffer);
+          char *cookie = strtok(tmp_buffer + pos, ";");
+          printf ("%s\n", cookie);
+          pfound = strstr(buffer + pos + 1, "Set-Cookie:");
+      }
+  }
+  printf ("Dlugosc zasobu: %d\n", 1);
 }
 
 int main(int argc, char *argv[]) {
@@ -159,9 +179,6 @@ int main(int argc, char *argv[]) {
 
   receive_response(&sock, buffer);
 
-  char tmp_buffer[sizeof(buffer) + 1]; //może inaczej? bez rozmiaru?
-
-
   /*
   Jeśli implementacja przyjmuje ograniczenia na liczbę przyjmowanych ciasteczek
    i ich długość, to ograniczenia te powinny zostać dobrane zgodnie z założeniami
@@ -174,21 +191,7 @@ int main(int argc, char *argv[]) {
     printf ("%s\n", strtok(buffer, "\r"));
   }
   else {
-    int dlen = strlen(buffer);
-    if (dlen > 0)
-    {
-        char *pfound = strstr(buffer, "Set-Cookie:");
-        while (pfound != NULL)
-        {
-            int pos = pfound - buffer; //iterator pos ustawiamy na 'S'
-            pos += 12; //przesunięcie iteratora tuż za 'Set-Cookie: '
-            strcpy(tmp_buffer, buffer);
-            char *cookie = strtok(tmp_buffer + pos, ";");
-            printf ("%s\n", cookie);
-            pfound = strstr(buffer + pos + 1, "Set-Cookie:");
-        }
-    }
-    printf ("Dlugosc zasobu: %d\n", 1);
+    print_report(buffer);
   }
 
 
