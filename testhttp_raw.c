@@ -112,7 +112,7 @@ void cut_https(char **s) {
   (*s) += 8;
 }
 
-char *set_request(char *tested_http_address, char **resource, char **cookies) {
+char *set_request(char *tested_http_address, char **cookies) {
   if (http_address(tested_http_address)) {
     cut_http(&tested_http_address);
   }
@@ -121,20 +121,25 @@ char *set_request(char *tested_http_address, char **resource, char **cookies) {
   }
 
   char *x = strchr(tested_http_address, '/');
+  char resource[MAX_SIZE];
 
   if (x != NULL) {
-    *resource = malloc(strlen(tested_http_address) * sizeof(char));
-    strcpy(*resource, tested_http_address);
-    *resource += (x - tested_http_address);
-    tested_http_address[x - tested_http_address] = 0;
+    strcpy(resource, tested_http_address);
+    int pos = x - tested_http_address;
+    int i = 0;
+    for (; pos < strlen(tested_http_address); i++, pos++) {
+      resource[i] = tested_http_address[pos];
+    }
+    resource[i] = '\0';
+    tested_http_address[x - tested_http_address] = '\0';
   }
   else {
-    *resource = malloc(sizeof(char));
-    *resource[0] = '/';
+    resource[0] = '/';
+    resource[1] = '\0';
   }
 
-  char *message = malloc(62 + strlen(*resource) + strlen(tested_http_address) + strlen(*cookies));
-  sprintf(message, "GET %s HTTP/1.1\r\nHost: %s\r\nCookie: %s\r\nConnection: close\n\r\n", *resource, tested_http_address, *cookies);
+  char *message = malloc(62 + strlen(resource) + strlen(tested_http_address) + strlen(*cookies));
+  sprintf(message, "GET %s HTTP/1.1\r\nHost: %s\r\nCookie: %s\r\nConnection: close\n\r\n", resource, tested_http_address, *cookies);
 
   return message;
 }
@@ -311,11 +316,11 @@ void handle_response(int *sock) {
 
 int main(int argc, char *argv[]) {
   int sock;
-  char *resource = NULL, *cookies = NULL, *message = NULL;
+  char *cookies = NULL, *message = NULL;
   struct addrinfo addr_hints, *addr_result = NULL;
 
   if (argc < 3) {
-    fatal("Usage: %s <connection_address>:<port> <cache file> <tested_http_address>\n", argv[0]);
+    fatal("Usage: %s <connection_address>:<port> <cookies_file> <tested_http_address>\n", argv[0]);
   }
 
   set_connection(&sock, argv[1], &addr_hints, &addr_result);
@@ -323,7 +328,7 @@ int main(int argc, char *argv[]) {
   freeaddrinfo(addr_result);
 
   cookies = read_cookies(argv[2]);
-  message = set_request(argv[3], &resource, &cookies);
+  message = set_request(argv[3], &cookies);
 
   send_request(&sock, &message);
 
@@ -331,7 +336,6 @@ int main(int argc, char *argv[]) {
 
   free(cookies);
   free(message);
-  free(resource);
 
   return 0;
 }
