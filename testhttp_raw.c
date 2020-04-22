@@ -166,7 +166,7 @@ void receive_header(int *sock, char *buffer) {
   while (rcv_len > 0) {
     memset(buffer_tmp, 0, sizeof(buffer_tmp));
     rcv_len = read(*sock, buffer_tmp, sizeof(buffer_tmp)); //ile ma ten sizeof?
-
+    // printf ("received %lu\n", rcv_len);
     if (rcv_len > 0) {
       strcat(buffer, buffer_tmp);
     }
