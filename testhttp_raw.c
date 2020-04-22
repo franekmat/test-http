@@ -309,7 +309,7 @@ void handle_response(int *sock) {
     content_length = receive_content(sock, buffer);
   }
   else {
-    // just_read_content(sock, buffer); //nie odbieram nic więcej
+    just_read_content(sock, buffer);
   }
 
   printf ("Dlugosc zasobu: %d\n", content_length);
