@@ -316,7 +316,6 @@ void handle_response(int *sock) {
 
 int main(int argc, char *argv[]) {
   int sock;
-  char *cookies = NULL, *message = NULL;
   struct addrinfo addr_hints, *addr_result = NULL;
 
   if (argc < 3) {
@@ -327,8 +326,8 @@ int main(int argc, char *argv[]) {
 
   freeaddrinfo(addr_result);
 
-  cookies = read_cookies(argv[2]);
-  message = set_request(argv[3], &cookies);
+  char *cookies = read_cookies(argv[2]);
+  char *message = set_request(argv[3], &cookies);
 
   send_request(&sock, &message);
 
