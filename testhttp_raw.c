@@ -182,7 +182,17 @@ int check_ok_status(char *buffer) {
   return 1;
 }
 
-void print_cookies(char *buffer) {
+int exist_same_cookie(char cookies_list[1005][1005], int cookies_cnt, char *cookie) {
+  int i = 0;
+  for (; i < cookies_cnt; i++) {
+    if (strcmp(cookie, cookies_list[i]) == 0) {
+      return 1;
+    }
+  }
+  return 0;
+}
+
+void get_cookies_from_response(char *buffer, char cookies_list[1005][1005], int *cookies_cnt) {
   char tmp_buffer[strlen(buffer) + 1];
   size_t dlen = strlen(buffer);
   if (dlen > 0)
@@ -194,9 +204,39 @@ void print_cookies(char *buffer) {
       pos += strlen("Set-Cookie: ");
       strcpy(tmp_buffer, buffer);
       char *cookie = strtok(tmp_buffer + pos, ";");
-      printf ("%s\n", cookie);
+
+      if (!exist_same_cookie(cookies_list, *cookies_cnt, cookie)) {
+        strcpy(cookies_list[*cookies_cnt], cookie);
+        (*cookies_cnt)++;
+      }
+
       pfound = strstr(buffer + pos + 1, "Set-Cookie:");
     }
+  }
+}
+
+void get_cookies_from_file(char **cookies_from_file, char cookies_list[1005][1005], int *cookies_cnt) {
+  char *cookie = strtok(*cookies_from_file, ";");
+  while (cookie != NULL) {
+    if (!exist_same_cookie(cookies_list, *cookies_cnt, cookie)) {
+      strcpy(cookies_list[*cookies_cnt], cookie);
+      (*cookies_cnt)++;
+    }
+    cookie = strtok(NULL, ";");
+  }
+}
+
+void print_cookies(char *buffer, char **cookies_from_file) {
+  char cookies_list[1005][1005];
+  int cookies_cnt = 0;
+
+  get_cookies_from_response(buffer, cookies_list, &cookies_cnt);
+
+  get_cookies_from_file(cookies_from_file, cookies_list, &cookies_cnt);
+
+  int i = 0;
+  for (; i < cookies_cnt; i++) {
+    printf ("%s\n", cookies_list[i]);
   }
 }
 
@@ -205,19 +245,12 @@ void extract_substring(char *res, char *s, size_t from, size_t to) {
   res[to - from] = '\0';
 }
 
-int get_not_chunked_length(char *buffer) {
-  char *pfound = strstr(buffer, "Content-Length: ");
-
+int check_if_chunked(char *buffer) {
+  char *pfound = strstr(buffer, "Transfer-Encoding: chunked");
   if (pfound != NULL) {
-    char *pfound_end = strstr(pfound, "\r\n");
-    size_t from = pfound - buffer + strlen("Content-Length: "); //czy int zamiast size_t?
-    size_t to = pfound_end - buffer;
-    char res[to - from + 1];
-    extract_substring(res, buffer, from, to);
-    return atoi(res);
+    return 1;
   }
-
-  return -1;
+  return 0;
 }
 
 void cut_header(char *buffer) {
@@ -246,14 +279,18 @@ int get_content_length(char *buffer) {
   return hex2dec(res);
 }
 
-void just_read_content(int *sock, char *buffer) {
+int just_read_content(int *sock) {
   char buffer_tmp[MAX_SIZE];
   ssize_t rcv_len = 1;
+  int res = 0;
 
   while (rcv_len > 0) {
     memset(buffer_tmp, 0, sizeof(buffer_tmp));
     rcv_len = read(*sock, buffer_tmp, sizeof(buffer_tmp));
+    res += rcv_len;
   }
+
+  return res;
 }
 
 int receive_content(int *sock, char *buffer) {
@@ -290,8 +327,9 @@ int receive_content(int *sock, char *buffer) {
   return ovr_res;
 }
 
-void handle_response(int *sock) {
+void handle_response(int *sock, char **cookies_from_file) {
   char buffer[MAX_SIZE];
+  int content_length;
 
   receive_header(sock, buffer);
 
@@ -300,20 +338,18 @@ void handle_response(int *sock) {
     return;
   }
 
-  print_cookies(buffer);
+  print_cookies(buffer, cookies_from_file);
 
-  int content_length = get_not_chunked_length(buffer);
-
-  if (content_length == -1) {
+  if (check_if_chunked(buffer)) {
     cut_header(buffer);
     content_length = receive_content(sock, buffer);
   }
   else {
-    just_read_content(sock, buffer);
+    cut_header(buffer);
+    content_length = strlen(buffer) + just_read_content(sock);
   }
 
   printf ("Dlugosc zasobu: %d\n", content_length);
-
 }
 
 int main(int argc, char *argv[]) {
@@ -333,7 +369,7 @@ int main(int argc, char *argv[]) {
 
   send_request(&sock, &message);
 
-  handle_response(&sock);
+  handle_response(&sock, &cookies);
 
   free(cookies);
   free(message);
