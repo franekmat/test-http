@@ -26,6 +26,6 @@ client = yes
 accept = 127.0.0.1:3333
 connect = $address:$port
 ENDOFFILE
-  sudo stunnel stunnel.conf
+  stunnel stunnel.conf
   ./testhttp_raw 127.0.0.1:3333 $1 $2
 fi
