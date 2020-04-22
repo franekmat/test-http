@@ -32,12 +32,13 @@ int hex2dec(char *value) {
 
 void set_connection(int *sock, char *address_port, struct addrinfo *addr_hints, struct addrinfo **addr_result) {
   char *host = strtok(address_port, ":");
-  char *port = strtok(NULL, ":"); //może zrobić to ładniej?
+  char *port = strtok(NULL, ":");
 
   memset(addr_hints, 0, sizeof(struct addrinfo));
   addr_hints->ai_family = AF_INET;
   addr_hints->ai_socktype = SOCK_STREAM;
   addr_hints->ai_protocol = IPPROTO_TCP;
+
   int err = getaddrinfo(host, port, addr_hints, addr_result);
   if (err == EAI_SYSTEM) {
     syserr("getaddrinfo: %s", gai_strerror(err));
@@ -45,6 +46,7 @@ void set_connection(int *sock, char *address_port, struct addrinfo *addr_hints, 
   else if (err != 0) {
     fatal("getaddrinfo: %s", gai_strerror(err));
   }
+
   *sock = socket((*addr_result)->ai_family, (*addr_result)->ai_socktype, (*addr_result)->ai_protocol);
   if (sock < 0) {
     syserr("socket");
@@ -181,20 +183,20 @@ int check_ok_status(char *buffer) {
 }
 
 void print_cookies(char *buffer) {
-  char tmp_buffer[strlen(buffer) + 1]; //może inaczej? bez rozmiaru?
-  int dlen = strlen(buffer);
+  char tmp_buffer[strlen(buffer) + 1];
+  size_t dlen = strlen(buffer);
   if (dlen > 0)
   {
-      char *pfound = strstr(buffer, "Set-Cookie: ");
-      while (pfound != NULL)
-      {
-          int pos = pfound - buffer; //iterator pos ustawiamy na 'S'
-          pos += strlen("Set-Cookie: ");
-          strcpy(tmp_buffer, buffer);
-          char *cookie = strtok(tmp_buffer + pos, ";");
-          printf ("%s\n", cookie);
-          pfound = strstr(buffer + pos + 1, "Set-Cookie:");
-      }
+    char *pfound = strstr(buffer, "Set-Cookie: ");
+    while (pfound != NULL)
+    {
+      size_t pos = pfound - buffer;
+      pos += strlen("Set-Cookie: ");
+      strcpy(tmp_buffer, buffer);
+      char *cookie = strtok(tmp_buffer + pos, ";");
+      printf ("%s\n", cookie);
+      pfound = strstr(buffer + pos + 1, "Set-Cookie:");
+    }
   }
 }
 
