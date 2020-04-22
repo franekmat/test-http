@@ -60,33 +60,37 @@ void set_connection(int *sock, char *address_port, struct addrinfo *addr_hints, 
 
 char *read_cookies(char *filename) {
   char *cookies = 0;
-  int cookies_len;
-  FILE *f = fopen(filename, "rb"); //rb??
+  size_t len = 0;
+  FILE *fp = fopen(filename, "r");
 
-  if (!f) {
+  if (!fp) {
+    syserr("read_cookies");
+  }
+  fseek(fp, 0, SEEK_END);
+  len = ftell(fp);
+  rewind(fp);
+
+  cookies = calloc(1, len + 1);
+  if (!cookies) {
+    fclose(fp);
     syserr("read_cookies");
   }
 
-  fseek(f, 0, SEEK_END);
-  cookies_len = ftell(f);
-  fseek(f, 0, SEEK_SET);
-  cookies = malloc(cookies_len);
-  if (cookies) {
-    fread(cookies, 1, cookies_len, f);
-  }
-  else {
+  if (fread(cookies, len, 1, fp) != 1) {
+    fclose(fp);
     syserr("read_cookies");
   }
-  fclose(f);
+
+  fclose(fp);
 
   int ii = 0;
-  for (; ii < cookies_len; ii++) {
-    if ((cookies)[ii] == '\n') {
-      (cookies)[ii] = ';';
+  for (; ii < len; ii++) {
+    if (cookies[ii] == '\n') {
+      cookies[ii] = ';';
     }
   }
   if ((cookies)[strlen(cookies) - 1] == ';') {
-    (cookies)[strlen(cookies) - 1] = 0;
+    (cookies)[strlen(cookies) - 1] = '\0';
   }
 
   return cookies;
@@ -121,6 +125,7 @@ char *set_request(char *tested_http_address, char **cookies) {
     cut_http(&tested_http_address);
   }
   if (https_address(tested_http_address)) {
+    //error bo https??
     cut_https(&tested_http_address);
   }
 
@@ -233,7 +238,7 @@ void print_cookies(char *buffer, char **cookies_from_file) {
   int cookies_cnt = 0;
 
   get_cookies_from_response(buffer, cookies_list, &cookies_cnt);
-
+  // printf ("%s\n", *cookies_from_file);
   get_cookies_from_file(cookies_from_file, cookies_list, &cookies_cnt);
 
   int i = 0;
@@ -335,6 +340,8 @@ void handle_response(int *sock, char **cookies_from_file) {
 
   receive_header(sock, buffer);
 
+  // printf ("%s\n", buffer);
+
   if (!check_ok_status(buffer)) {
     printf ("%s\n", strtok(buffer, "\r\n")); //tak naprawde sam slash starczy
     return;
@@ -363,14 +370,12 @@ int main(int argc, char *argv[]) {
   }
 
   set_connection(&sock, argv[1], &addr_hints, &addr_result);
-
   freeaddrinfo(addr_result);
 
   char *cookies = read_cookies(argv[2]);
   char *message = set_request(argv[3], &cookies);
 
   send_request(&sock, &message);
-
   handle_response(&sock, &cookies);
 
   free(cookies);
