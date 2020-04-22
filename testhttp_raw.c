@@ -230,16 +230,16 @@ void cut_header(char *buffer) {
   buffer[i] = '\0';
 }
 
-int get_content_length(char **buffer) {
+int get_content_length(char *buffer) {
   int from = 0;
-  char *pfound_end = strstr(*buffer, "\r\n");
+  char *pfound_end = strstr(buffer, "\r\n");
   if (pfound_end == NULL) {
     return -1;
   }
 
-  size_t to = pfound_end - (*buffer);
+  size_t to = pfound_end - buffer;
   char res[to + 1];
-  extract_substring(res, *buffer, from, to);
+  extract_substring(res, buffer, from, to);
 
   return hex2dec(res);
 }
@@ -267,7 +267,7 @@ int receive_content(int *sock, char *buffer) {
       strcat(buffer, buffer_tmp);
     }
 
-    int content_length = get_content_length(&buffer);
+    int content_length = get_content_length(buffer);
     int overall_length = (strstr(buffer, "\r\n") - buffer) + strlen("\r\n") + content_length + strlen("\r\n");
     if (content_length == -1) {
       continue;
