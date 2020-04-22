@@ -13,12 +13,19 @@ if [[ $2 = http://* ]] ; then
   fi
   ./testhttp_raw $address:$port $1 $2
 else
-  address_port=${2#"http://"};
+  address_port=${2#"https://"};
   address_port=${address_port%/*};
   port="${address_port#*:}"
   address="${address_port%:*}"
   if [[ $port == $address_port ]] ; then
     port="443"
   fi
+  cat > stunnel.conf << ENDOFFILE
+[service]
+client = yes
+accept = 127.0.0.1:3333
+connect = $address:$port
+ENDOFFILE
+  sudo stunnel stunnel.conf
   ./testhttp_raw 127.0.0.1:3333 $1 $2
 fi
