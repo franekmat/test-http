@@ -7,7 +7,9 @@
 #include <stdlib.h>
 #include "err.h"
 
-#define MAX_SIZE 1000005
+#define BUFFER_SIZE 1000005
+#define COOKIE_MAX_SIZE 5000
+#define COOKIES_MAX_NUMBER 500
 
 int hex2dec(char *value) {
   int len = strlen(value) - 1, base = 1, res = 0;
@@ -123,7 +125,7 @@ char *set_request(char *tested_http_address, char **cookies) {
   }
 
   char *x = strchr(tested_http_address, '/');
-  char resource[MAX_SIZE];
+  char resource[strlen(tested_http_address) + 1];
 
   if (x != NULL) {
     strcpy(resource, tested_http_address);
@@ -154,7 +156,7 @@ void send_request(int *sock, char **message) {
 }
 
 void receive_header(int *sock, char *buffer) {
-  char buffer_tmp[MAX_SIZE];
+  char buffer_tmp[BUFFER_SIZE];
   ssize_t rcv_len = 1;
   while (rcv_len > 0) {
     memset(buffer_tmp, 0, sizeof(buffer_tmp));
@@ -182,7 +184,7 @@ int check_ok_status(char *buffer) {
   return 1;
 }
 
-int exist_same_cookie(char cookies_list[1005][1005], int cookies_cnt, char *cookie) {
+int exist_same_cookie(char cookies_list[COOKIES_MAX_NUMBER][COOKIE_MAX_SIZE], int cookies_cnt, char *cookie) {
   int i = 0;
   for (; i < cookies_cnt; i++) {
     if (strcmp(cookie, cookies_list[i]) == 0) {
@@ -192,7 +194,7 @@ int exist_same_cookie(char cookies_list[1005][1005], int cookies_cnt, char *cook
   return 0;
 }
 
-void get_cookies_from_response(char *buffer, char cookies_list[1005][1005], int *cookies_cnt) {
+void get_cookies_from_response(char *buffer, char cookies_list[COOKIES_MAX_NUMBER][COOKIE_MAX_SIZE], int *cookies_cnt) {
   char tmp_buffer[strlen(buffer) + 1];
   size_t dlen = strlen(buffer);
   if (dlen > 0)
@@ -215,7 +217,7 @@ void get_cookies_from_response(char *buffer, char cookies_list[1005][1005], int 
   }
 }
 
-void get_cookies_from_file(char **cookies_from_file, char cookies_list[1005][1005], int *cookies_cnt) {
+void get_cookies_from_file(char **cookies_from_file, char cookies_list[COOKIES_MAX_NUMBER][COOKIE_MAX_SIZE], int *cookies_cnt) {
   char *cookie = strtok(*cookies_from_file, ";");
   while (cookie != NULL) {
     if (!exist_same_cookie(cookies_list, *cookies_cnt, cookie)) {
@@ -227,7 +229,7 @@ void get_cookies_from_file(char **cookies_from_file, char cookies_list[1005][100
 }
 
 void print_cookies(char *buffer, char **cookies_from_file) {
-  char cookies_list[1005][1005];
+  char cookies_list[COOKIES_MAX_NUMBER][COOKIE_MAX_SIZE];
   int cookies_cnt = 0;
 
   get_cookies_from_response(buffer, cookies_list, &cookies_cnt);
@@ -280,7 +282,7 @@ int get_content_length(char *buffer) {
 }
 
 int just_read_content(int *sock) {
-  char buffer_tmp[MAX_SIZE];
+  char buffer_tmp[BUFFER_SIZE];
   ssize_t rcv_len = 1;
   int res = 0;
 
@@ -294,7 +296,7 @@ int just_read_content(int *sock) {
 }
 
 int receive_content(int *sock, char *buffer) {
-  char buffer_tmp[MAX_SIZE];
+  char buffer_tmp[BUFFER_SIZE];
   ssize_t rcv_len = 1;
   int ovr_res = 0;
 
@@ -328,7 +330,7 @@ int receive_content(int *sock, char *buffer) {
 }
 
 void handle_response(int *sock, char **cookies_from_file) {
-  char buffer[MAX_SIZE];
+  char buffer[BUFFER_SIZE];
   int content_length;
 
   receive_header(sock, buffer);
