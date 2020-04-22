@@ -1,0 +1,19 @@
+#!/bin/bash
+if [ "$#" -ne 2 ]; then
+    echo "Usage: ./testhttp <cookies_file> <tested_http_address>"
+fi
+
+echo $2
+
+if [[ $2 = http://* ]] ; then
+  address_port=${2#"http://"};
+  address_port=${address_port%/*};
+  port="${address_port#*:}"
+  address="${address_port%:*}"
+  if [[ $port == $address_port ]] ; then
+    port="80"
+  fi
+  ./testhttp_raw $address:$port $1 $2
+else
+  echo "nie"
+fi
