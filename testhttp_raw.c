@@ -176,9 +176,17 @@ void send_request(int *sock, char **message) {
 void receive_header(int *sock, char *buffer) {
   char buffer_tmp[BUFFER_SIZE];
   ssize_t rcv_len = 1;
+
+  sleep(1);
   while (rcv_len > 0) {
-    memset(buffer_tmp, 0, sizeof(buffer_tmp));
-    rcv_len = read(*sock, buffer_tmp, sizeof(buffer_tmp)); //ile ma ten sizeof?
+    if (rcv_len != 1) {
+      memset(buffer_tmp, 0, rcv_len);
+    }
+    else {
+      memset(buffer_tmp, 0, BUFFER_SIZE);
+    }
+    rcv_len = read(*sock, buffer_tmp, BUFFER_SIZE - 1);
+    printf ("read %zd\n", rcv_len);
     // printf ("received %lu\n", rcv_len);
 
     if (rcv_len < 0) {
@@ -299,8 +307,14 @@ int just_read_content(int *sock) {
   int res = 0;
 
   while (rcv_len > 0) {
-    memset(buffer_tmp, 0, sizeof(buffer_tmp));
-    rcv_len = read(*sock, buffer_tmp, sizeof(buffer_tmp));
+    if (rcv_len != 1) {
+      memset(buffer_tmp, 0, rcv_len);
+    }
+    else {
+      memset(buffer_tmp, 0, BUFFER_SIZE);
+    }
+    rcv_len = read(*sock, buffer_tmp, BUFFER_SIZE - 1);
+    printf ("read %zd\n", rcv_len);
     if (rcv_len < 0) {
       syserr("read");
     }
@@ -315,27 +329,49 @@ int receive_content(int *sock, char *buffer) {
   ssize_t rcv_len = 1;
   int ovr_res = 0;
 
-  while (rcv_len > 0) {
-    memset(buffer_tmp, 0, sizeof(buffer_tmp));
-    rcv_len = read(*sock, buffer_tmp, sizeof(buffer_tmp));
-
-    if (rcv_len < 0) {
-      syserr("read");
-    }
-    else if (rcv_len > 0) {
-      strcat(buffer, buffer_tmp);
-    }
-    else {
-      break;
+  while (rcv_len > 0 || strlen(buffer) > 0) { //while we read something last time or we have sth in the buffer
+    if (rcv_len != 0) {
+      if (rcv_len != 1) {
+        memset(buffer_tmp, 0, rcv_len);
+      }
+      else {
+        memset(buffer_tmp, 0, BUFFER_SIZE);
+      }
+      rcv_len = read(*sock, buffer_tmp, BUFFER_SIZE - 1);
+      printf ("read %zd\n", rcv_len);
+      if (rcv_len < 0) {
+        syserr("read");
+      }
+      else if (rcv_len > 0) {
+        strcat(buffer, buffer_tmp);
+      }
     }
 
     int content_length = get_content_length(buffer);
     int overall_length = (strstr(buffer, "\r\n") - buffer) + strlen("\r\n") + content_length + strlen("\r\n");
+
+    // printf ("mam teraz %lu, a potrzebuję %d\n", strlen(buffer), overall_length);
+
     if (content_length == -1) {
       continue;
     }
-    int i = 0;
-    if (overall_length <= strlen(buffer)) {
+    else {
+      ssize_t rcv_len2 = 1;
+      while (rcv_len2 > 0 && overall_length > strlen(buffer)) {
+        overall_length -= strlen(buffer);
+        if (rcv_len2 != 1) {
+          memset(buffer, 0, rcv_len2);
+        }
+        else {
+          memset(buffer, 0, BUFFER_SIZE);
+        }
+        rcv_len2 = read(*sock, buffer, BUFFER_SIZE - 1);
+        printf ("read %zd\n", rcv_len2);
+        if (rcv_len2 < 0) {
+          syserr("read");
+        }
+      }
+      int i = 0;
       ovr_res += content_length;
       // printf ("added %d\n", content_length);
       while (overall_length < strlen(buffer)) {
