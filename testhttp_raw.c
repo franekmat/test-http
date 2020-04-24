@@ -68,6 +68,11 @@ char *read_cookies(char *filename) {
   }
   fseek(fp, 0, SEEK_END);
   len = ftell(fp);
+
+  if (len == 0) {
+    return NULL;
+  }
+
   rewind(fp);
 
   cookies = calloc(1, len + 1);
@@ -147,8 +152,16 @@ char *set_request(char *tested_http_address, char **cookies) {
     resource[1] = '\0';
   }
 
-  char *message = malloc(62 + strlen(resource) + strlen(tested_http_address) + strlen(*cookies));
-  sprintf(message, "GET %s HTTP/1.1\r\nHost: %s\r\nCookie: %s\r\nConnection: close\n\r\n", resource, tested_http_address, *cookies);
+  char *message;
+
+  if (*cookies != NULL) {
+    message = malloc(53 + strlen(resource) + strlen(tested_http_address) + strlen(*cookies));
+    sprintf(message, "GET %s HTTP/1.1\r\nHost: %s\r\nCookie: %s\r\nConnection: close\n\r\n", resource, tested_http_address, *cookies);
+  }
+  else {
+    message = malloc(43 + strlen(resource) + strlen(tested_http_address));
+    sprintf(message, "GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\n\r\n", resource, tested_http_address);
+  }
 
   return message;
 }
