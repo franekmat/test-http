@@ -12,7 +12,7 @@ if [[ $2 = http://* ]] ; then
   if [[ $port == $address_port ]] ; then
     port="80"
   fi
-  echo "./testhttp_raw $address:$port $1 $2"
+  # echo "./testhttp_raw $address:$port $1 $2"
   ./testhttp_raw $address:$port $1 $2
 else
   address_port=${2#"https://"}
@@ -22,16 +22,19 @@ else
   if [[ $port == $address_port ]] ; then
     port="443"
   fi
-  echo $address_port
+  # echo $address_port
   cat > stunnel.conf << ENDOFFILE
+pid = $PWD/stunnel.pid
 [service]
 client = yes
 accept = 127.0.0.1:3333
 connect = $address:$port
 ENDOFFILE
   stunnel stunnel.conf
-  echo "./testhttp_raw 127.0.0.1:3333 $1 $2"
+  # echo "./testhttp_raw 127.0.0.1:3333 $1 $2"
   ./testhttp_raw 127.0.0.1:3333 $1 $2
+  pid=`cat stunnel.pid`
+  kill $pid
 fi
 
 exit 0
