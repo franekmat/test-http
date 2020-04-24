@@ -5,22 +5,24 @@ if [ "$#" -ne 2 ]; then
 fi
 
 if [[ $2 = http://* ]] ; then
-  address_port=${2#"http://"};
-  address_port=${address_port%/*};
-  port="${address_port#*:}"
-  address="${address_port%:*}"
+  address_port=${2#"http://"}
+  address_port=${address_port%%/*}
+  port=${address_port#*:}
+  address=${address_port%:*}
   if [[ $port == $address_port ]] ; then
     port="80"
   fi
+  echo "./testhttp_raw $address:$port $1 $2"
   ./testhttp_raw $address:$port $1 $2
 else
-  address_port=${2#"https://"};
-  address_port=${address_port%/*};
-  port="${address_port#*:}"
-  address="${address_port%:*}"
+  address_port=${2#"https://"}
+  address_port=${address_port%%/*}
+  port=${address_port#*:}
+  address=${address_port%:*}
   if [[ $port == $address_port ]] ; then
     port="443"
   fi
+  echo $address_port
   cat > stunnel.conf << ENDOFFILE
 [service]
 client = yes
@@ -28,6 +30,7 @@ accept = 127.0.0.1:3333
 connect = $address:$port
 ENDOFFILE
   stunnel stunnel.conf
+  echo "./testhttp_raw 127.0.0.1:3333 $1 $2"
   ./testhttp_raw 127.0.0.1:3333 $1 $2
 fi
 

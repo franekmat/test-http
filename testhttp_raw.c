@@ -88,15 +88,22 @@ char *read_cookies(char *filename) {
 
   fclose(fp);
 
-  int ii = 0;
-  for (; ii < len; ii++) {
-    if (cookies[ii] == '\n') {
-      cookies[ii] = ';';
+  char tmp[len * 2];
+
+  int i = 0, pos = 0;
+  for (; i < len; i++) {
+    if (cookies[i] != '\n') {
+      tmp[pos] = cookies[i];
+      pos++;
+    }
+    else if (i + 1 < len) {
+      tmp[pos] = ';';
+      tmp[pos + 1] = ' ';
+      pos += 2;
     }
   }
-  if ((cookies)[strlen(cookies) - 1] == ';') {
-    (cookies)[strlen(cookies) - 1] = '\0';
-  }
+  tmp[pos] = '\0';
+  strcpy(cookies, tmp);
 
   return cookies;
 }
@@ -130,7 +137,6 @@ char *set_request(char *tested_http_address, char **cookies) {
     cut_http(&tested_http_address);
   }
   if (https_address(tested_http_address)) {
-    //error bo https??
     cut_https(&tested_http_address);
   }
 
@@ -153,21 +159,28 @@ char *set_request(char *tested_http_address, char **cookies) {
   }
 
   char *message;
+  char *host = strtok(tested_http_address, ":");
 
   if (*cookies != NULL) {
-    message = malloc(53 + strlen(resource) + strlen(tested_http_address) + strlen(*cookies));
-    sprintf(message, "GET %s HTTP/1.1\r\nHost: %s\r\nCookie: %s\r\nConnection: close\n\r\n", resource, tested_http_address, *cookies);
+    int size = strlen("GET  HTTP/1.1\r\nHost: \r\nCookie: \r\nConnection: close\r\n\r\n");
+    // printf ("%d + %lu + %lu + %lu\n", size, strlen(resource), strlen(host), strlen(*cookies));
+    message = malloc(size + strlen(resource) + strlen(host) + strlen(*cookies));
+    sprintf(message, "GET %s HTTP/1.1\r\nHost: %s\r\nCookie: %s\r\nConnection: close\r\n\r\n", resource, host, *cookies);
   }
   else {
-    message = malloc(43 + strlen(resource) + strlen(tested_http_address));
-    sprintf(message, "GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\n\r\n", resource, tested_http_address);
+    int size = strlen("GET  HTTP/1.1\r\nHost: \r\nConnection: close\r\n\r\n");
+    // printf ("%d + %lu + %lu\n", size, strlen(resource), strlen(host));
+    message = malloc(size + strlen(resource) + strlen(host));
+    sprintf(message, "GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", resource, host);
   }
+
+  // printf ("%s\n", message);
 
   return message;
 }
 
 void send_request(int *sock, char **message) {
-  ssize_t len = strnlen(*message, 1000000); //8KB ??
+  ssize_t len = strlen(*message);
   if (write(*sock, *message, len) != len) {
     syserr("partial / failed write");
   }
@@ -177,7 +190,6 @@ void receive_header(int *sock, char *buffer) {
   char buffer_tmp[BUFFER_SIZE];
   ssize_t rcv_len = 1;
 
-  sleep(1);
   while (rcv_len > 0) {
     if (rcv_len != 1) {
       memset(buffer_tmp, 0, rcv_len);
@@ -186,8 +198,6 @@ void receive_header(int *sock, char *buffer) {
       memset(buffer_tmp, 0, BUFFER_SIZE);
     }
     rcv_len = read(*sock, buffer_tmp, BUFFER_SIZE - 1);
-    printf ("read %zd\n", rcv_len);
-    // printf ("received %lu\n", rcv_len);
 
     if (rcv_len < 0) {
       syserr("read");
@@ -207,9 +217,10 @@ void receive_header(int *sock, char *buffer) {
 }
 
 int check_ok_status(char *buffer) {
-  char status[16];
-  strncpy(status, buffer, 15);
-  status[15] = '\0';
+  int ok_size = strlen("HTTP/1.1 200 OK");
+  char status[ok_size + 1];
+  strncpy(status, buffer, ok_size);
+  status[ok_size] = '\0';
 
   if (strcmp("HTTP/1.1 200 OK", status) != 0) {
     return 0;
@@ -314,7 +325,6 @@ int just_read_content(int *sock) {
       memset(buffer_tmp, 0, BUFFER_SIZE);
     }
     rcv_len = read(*sock, buffer_tmp, BUFFER_SIZE - 1);
-    printf ("read %zd\n", rcv_len);
     if (rcv_len < 0) {
       syserr("read");
     }
@@ -338,7 +348,6 @@ int receive_content(int *sock, char *buffer) {
         memset(buffer_tmp, 0, BUFFER_SIZE);
       }
       rcv_len = read(*sock, buffer_tmp, BUFFER_SIZE - 1);
-      printf ("read %zd\n", rcv_len);
       if (rcv_len < 0) {
         syserr("read");
       }
@@ -350,7 +359,7 @@ int receive_content(int *sock, char *buffer) {
     int content_length = get_content_length(buffer);
     int overall_length = (strstr(buffer, "\r\n") - buffer) + strlen("\r\n") + content_length + strlen("\r\n");
 
-    // printf ("mam teraz %lu, a potrzebuję %d\n", strlen(buffer), overall_length);
+    // printf ("oczekuję %d, mam teraz %lu, a potrzebuję w sumie %d\n", content_length, strlen(buffer), overall_length);
 
     if (content_length == -1) {
       continue;
@@ -366,7 +375,6 @@ int receive_content(int *sock, char *buffer) {
           memset(buffer, 0, BUFFER_SIZE);
         }
         rcv_len2 = read(*sock, buffer, BUFFER_SIZE - 1);
-        printf ("read %zd\n", rcv_len2);
         if (rcv_len2 < 0) {
           syserr("read");
         }
@@ -389,11 +397,13 @@ int receive_content(int *sock, char *buffer) {
 void handle_response(int *sock) {
   char buffer[BUFFER_SIZE];
   int content_length;
-
   receive_header(sock, buffer);
 
   if (!check_ok_status(buffer)) {
-    printf ("%s\n", strtok(buffer, "\r\n")); //tak naprawde sam slash starczy
+    char *pfound = strstr(buffer, "\r\n");
+    int pos = pfound - buffer;
+    buffer[pos] = '\0';
+    printf ("%s\n", buffer);
     return;
   }
 
@@ -428,8 +438,11 @@ int main(int argc, char *argv[]) {
   send_request(&sock, &message);
   handle_response(&sock);
 
+  // printf ("raz\n");
   free(cookies);
+  // printf ("dwa\n");
   free(message);
+  // printf ("trzy\n");
 
   return 0;
 }
