@@ -167,8 +167,15 @@ void receive_header(int *sock, char *buffer) {
     memset(buffer_tmp, 0, sizeof(buffer_tmp));
     rcv_len = read(*sock, buffer_tmp, sizeof(buffer_tmp)); //ile ma ten sizeof?
     // printf ("received %lu\n", rcv_len);
-    if (rcv_len > 0) {
+
+    if (rcv_len < 0) {
+      syserr("read");
+    }
+    else if (rcv_len > 0) {
       strcat(buffer, buffer_tmp);
+    }
+    else {
+      break;
     }
 
     char *pfound = strstr(buffer, "\r\n\r\n");
@@ -222,24 +229,11 @@ void get_cookies_from_response(char *buffer, char cookies_list[COOKIES_MAX_NUMBE
   }
 }
 
-void get_cookies_from_file(char **cookies_from_file, char cookies_list[COOKIES_MAX_NUMBER][COOKIE_MAX_SIZE], int *cookies_cnt) {
-  char *cookie = strtok(*cookies_from_file, ";");
-  while (cookie != NULL) {
-    if (!exist_same_cookie(cookies_list, *cookies_cnt, cookie)) {
-      strcpy(cookies_list[*cookies_cnt], cookie);
-      (*cookies_cnt)++;
-    }
-    cookie = strtok(NULL, ";");
-  }
-}
-
-void print_cookies(char *buffer, char **cookies_from_file) {
+void print_cookies(char *buffer) {
   char cookies_list[COOKIES_MAX_NUMBER][COOKIE_MAX_SIZE];
   int cookies_cnt = 0;
 
   get_cookies_from_response(buffer, cookies_list, &cookies_cnt);
-  // printf ("%s\n", *cookies_from_file);
-  get_cookies_from_file(cookies_from_file, cookies_list, &cookies_cnt);
 
   int i = 0;
   for (; i < cookies_cnt; i++) {
@@ -294,6 +288,9 @@ int just_read_content(int *sock) {
   while (rcv_len > 0) {
     memset(buffer_tmp, 0, sizeof(buffer_tmp));
     rcv_len = read(*sock, buffer_tmp, sizeof(buffer_tmp));
+    if (rcv_len < 0) {
+      syserr("read");
+    }
     res += rcv_len;
   }
 
@@ -309,8 +306,14 @@ int receive_content(int *sock, char *buffer) {
     memset(buffer_tmp, 0, sizeof(buffer_tmp));
     rcv_len = read(*sock, buffer_tmp, sizeof(buffer_tmp));
 
-    if (rcv_len > 0) {
+    if (rcv_len < 0) {
+      syserr("read");
+    }
+    else if (rcv_len > 0) {
       strcat(buffer, buffer_tmp);
+    }
+    else {
+      break;
     }
 
     int content_length = get_content_length(buffer);
@@ -334,20 +337,18 @@ int receive_content(int *sock, char *buffer) {
   return ovr_res;
 }
 
-void handle_response(int *sock, char **cookies_from_file) {
+void handle_response(int *sock) {
   char buffer[BUFFER_SIZE];
   int content_length;
 
   receive_header(sock, buffer);
-
-  // printf ("%s\n", buffer);
 
   if (!check_ok_status(buffer)) {
     printf ("%s\n", strtok(buffer, "\r\n")); //tak naprawde sam slash starczy
     return;
   }
 
-  print_cookies(buffer, cookies_from_file);
+  print_cookies(buffer);
 
   if (check_if_chunked(buffer)) {
     cut_header(buffer);
@@ -376,7 +377,7 @@ int main(int argc, char *argv[]) {
   char *message = set_request(argv[3], &cookies);
 
   send_request(&sock, &message);
-  handle_response(&sock, &cookies);
+  handle_response(&sock);
 
   free(cookies);
   free(message);
