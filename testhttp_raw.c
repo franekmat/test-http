@@ -8,8 +8,6 @@
 #include "err.h"
 
 #define BUFFER_SIZE 1000005
-#define COOKIE_MAX_SIZE 5000
-#define COOKIES_MAX_NUMBER 500
 
 int hex2dec(char *value) {
   int len = strlen(value) - 1, base = 1, res = 0;
@@ -75,7 +73,7 @@ char *read_cookies(char *filename) {
 
   rewind(fp);
 
-  cookies = calloc(1, len + 1);
+  cookies = calloc(1, 2 * (len + 1));
   if (!cookies) {
     fclose(fp);
     syserr("read_cookies");
@@ -163,18 +161,14 @@ char *set_request(char *tested_http_address, char **cookies) {
 
   if (*cookies != NULL) {
     int size = strlen("GET  HTTP/1.1\r\nHost: \r\nCookie: \r\nConnection: close\r\n\r\n");
-    // printf ("%d + %lu + %lu + %lu\n", size, strlen(resource), strlen(host), strlen(*cookies));
-    message = malloc(size + strlen(resource) + strlen(host) + strlen(*cookies));
+    message = malloc(size + strlen(resource) + strlen(host) + strlen(*cookies) + 1);
     sprintf(message, "GET %s HTTP/1.1\r\nHost: %s\r\nCookie: %s\r\nConnection: close\r\n\r\n", resource, host, *cookies);
   }
   else {
     int size = strlen("GET  HTTP/1.1\r\nHost: \r\nConnection: close\r\n\r\n");
-    // printf ("%d + %lu + %lu\n", size, strlen(resource), strlen(host));
-    message = malloc(size + strlen(resource) + strlen(host));
+    message = malloc(size + strlen(resource) + strlen(host) + 1);
     sprintf(message, "GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", resource, host);
   }
-
-  // printf ("%s\n", message);
 
   return message;
 }
@@ -228,17 +222,20 @@ int check_ok_status(char *buffer) {
   return 1;
 }
 
-int exist_same_cookie(char cookies_list[COOKIES_MAX_NUMBER][COOKIE_MAX_SIZE], int cookies_cnt, char *cookie) {
-  int i = 0;
-  for (; i < cookies_cnt; i++) {
-    if (strcmp(cookie, cookies_list[i]) == 0) {
+int exist_same_cookie(char *cookies_list, char *cookie) {
+  char cookies_list_tmp[strlen(cookies_list) + 1];
+  strcpy(cookies_list_tmp, cookies_list);
+  char *cookie_ = strtok(cookies_list_tmp, ";");
+  while (cookie_ != NULL) {
+    if (strcmp(cookie, cookie_) == 0) {
       return 1;
     }
+    cookie_ = strtok(NULL, ";");
   }
   return 0;
 }
 
-void get_cookies_from_response(char *buffer, char cookies_list[COOKIES_MAX_NUMBER][COOKIE_MAX_SIZE], int *cookies_cnt) {
+void get_cookies_from_response(char *buffer, char *cookies_list) {
   char tmp_buffer[strlen(buffer) + 1];
   size_t dlen = strlen(buffer);
   if (dlen > 0)
@@ -248,12 +245,15 @@ void get_cookies_from_response(char *buffer, char cookies_list[COOKIES_MAX_NUMBE
     {
       size_t pos = pfound - buffer;
       pos += strlen("Set-Cookie: ");
+      memset(tmp_buffer, 0, strlen(buffer));
       strcpy(tmp_buffer, buffer);
       char *cookie = strtok(tmp_buffer + pos, ";");
 
-      if (!exist_same_cookie(cookies_list, *cookies_cnt, cookie)) {
-        strcpy(cookies_list[*cookies_cnt], cookie);
-        (*cookies_cnt)++;
+      if (!exist_same_cookie(cookies_list, cookie)) {
+        int size = strlen(cookies_list);
+        strcpy(cookies_list + size, cookie);
+        size = strlen(cookies_list);
+        strcpy(cookies_list + size, ";");
       }
 
       pfound = strstr(buffer + pos + 1, "Set-Cookie:");
@@ -262,14 +262,19 @@ void get_cookies_from_response(char *buffer, char cookies_list[COOKIES_MAX_NUMBE
 }
 
 void print_cookies(char *buffer) {
-  char cookies_list[COOKIES_MAX_NUMBER][COOKIE_MAX_SIZE];
-  int cookies_cnt = 0;
+  char cookies_list[BUFFER_SIZE];
+  memset(cookies_list, 0, BUFFER_SIZE);
 
-  get_cookies_from_response(buffer, cookies_list, &cookies_cnt);
+  get_cookies_from_response(buffer, cookies_list);
 
   int i = 0;
-  for (; i < cookies_cnt; i++) {
-    printf ("%s\n", cookies_list[i]);
+  for (; i < strlen(cookies_list); i++) {
+    if (cookies_list[i] != ';') {
+      printf ("%c", cookies_list[i]);
+    }
+    else {
+      printf ("\n");
+    }
   }
 }
 
@@ -359,8 +364,6 @@ int receive_content(int *sock, char *buffer) {
     int content_length = get_content_length(buffer);
     int overall_length = (strstr(buffer, "\r\n") - buffer) + strlen("\r\n") + content_length + strlen("\r\n");
 
-    // printf ("oczekuję %d, mam teraz %lu, a potrzebuję w sumie %d\n", content_length, strlen(buffer), overall_length);
-
     if (content_length == -1) {
       continue;
     }
@@ -381,7 +384,6 @@ int receive_content(int *sock, char *buffer) {
       }
       int i = 0;
       ovr_res += content_length;
-      // printf ("added %d\n", content_length);
       while (overall_length < strlen(buffer)) {
         buffer[i] = buffer[overall_length];
         i++;
@@ -396,6 +398,7 @@ int receive_content(int *sock, char *buffer) {
 
 void handle_response(int *sock) {
   char buffer[BUFFER_SIZE];
+  memset(buffer, 0, BUFFER_SIZE);
   int content_length;
   receive_header(sock, buffer);
 
@@ -438,11 +441,8 @@ int main(int argc, char *argv[]) {
   send_request(&sock, &message);
   handle_response(&sock);
 
-  // printf ("raz\n");
   free(cookies);
-  // printf ("dwa\n");
   free(message);
-  // printf ("trzy\n");
 
   return 0;
 }
